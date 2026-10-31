@@ -52,7 +52,7 @@ HST.DEFAULTS = {
     -- Spell icons from the game's damage meter data, shown before the spell name.
     showIcons = true,
     iconReplacesName = false,
-    -- A dark plate behind crits, and normal lines fading while they pass behind one.
+    -- Normal lines fade out while they pass behind a crit.
     critFocus = true,
     showTargets = false,
     -- Outgoing hits below this are dropped before merging into the screen.

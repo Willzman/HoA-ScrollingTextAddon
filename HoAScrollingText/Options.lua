@@ -151,7 +151,7 @@ local function Build()
     tinsert(window.boxes, CheckBox(window, "Icon replaces spell name", 224, -70,
         function() return db().iconReplacesName end, function(v) db().iconReplacesName = v end))
 
-    tinsert(window.boxes, CheckBox(window, "Crits hide the hits behind them", 24, -94,
+    tinsert(window.boxes, CheckBox(window, "Fade hits behind crits", 24, -94,
         function() return db().critFocus end, function(v) db().critFocus = v end))
 
     local header = window:CreateFontString(nil, "ARTWORK", "GameFontNormal")
