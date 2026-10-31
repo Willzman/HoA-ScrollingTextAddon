@@ -19,6 +19,15 @@ local MOVER_WIDTH = 170
 local ICON_GAP = 3
 -- Trim the border every 1.12 icon has baked in.
 local ICON_TRIM = 0.07
+-- Crit focus: a soft dark plate behind each crit, and normal lines passing behind a crit fade
+-- to this much of their alpha. The 1.12 UI can't blur, so this stands in for it.
+local FLAT = "Interface\\Buttons\\WHITE8X8"
+local PLATE_ALPHA = 0.6
+local PLATE_PAD_X = 8
+local PLATE_FEATHER = 18
+local PLATE_HEIGHT = 1.35
+local DIM_ALPHA = 0.2
+local DIM_MARGIN = 2
 
 local holder = CreateFrame("Frame", "HoAScrollingTextFrame", UIParent)
 holder:SetFrameStrata("HIGH")
@@ -26,8 +35,14 @@ holder:SetAllPoints(UIParent)
 holder:EnableMouse(false)
 holder:Hide()
 
+-- Crits draw on their own layer above the normal lines, so their plate covers them.
+local critLayer = CreateFrame("Frame", nil, holder)
+critLayer:SetAllPoints(holder)
+critLayer:SetFrameLevel(holder:GetFrameLevel() + 5)
+critLayer:EnableMouse(false)
+
 local active = {}
-local spare = {}
+local spare = { [true] = {}, [false] = {} }
 local movers = {}
 
 local function SetSize(text, size)
@@ -40,16 +55,72 @@ local function SetSize(text, size)
         text.icon:SetWidth(size)
         text.icon:SetHeight(size)
     end
+    text.shownSize = size
 end
 
-local function Acquire()
-    local text = tremove(spare)
+-- Three pieces: a solid middle under the text and icon, and a fade-out on each side.
+local function Plate(text)
+    local plate = {}
+    plate.middle = critLayer:CreateTexture(nil, "BACKGROUND")
+    plate.left = critLayer:CreateTexture(nil, "BACKGROUND")
+    plate.right = critLayer:CreateTexture(nil, "BACKGROUND")
+    for _, piece in pairs(plate) do
+        piece:SetTexture(FLAT)
+        piece:Hide()
+    end
+    plate.middle:SetVertexColor(0, 0, 0, PLATE_ALPHA)
+    plate.left:SetGradientAlpha("HORIZONTAL", 0, 0, 0, 0, 0, 0, 0, PLATE_ALPHA)
+    plate.right:SetGradientAlpha("HORIZONTAL", 0, 0, 0, PLATE_ALPHA, 0, 0, 0, 0)
+    plate.left:SetPoint("TOPRIGHT", plate.middle, "TOPLEFT", 0, 0)
+    plate.left:SetPoint("BOTTOMRIGHT", plate.middle, "BOTTOMLEFT", 0, 0)
+    plate.right:SetPoint("TOPLEFT", plate.middle, "TOPRIGHT", 0, 0)
+    plate.right:SetPoint("BOTTOMLEFT", plate.middle, "BOTTOMRIGHT", 0, 0)
+    plate.left:SetWidth(PLATE_FEATHER)
+    plate.right:SetWidth(PLATE_FEATHER)
+    return plate
+end
+
+local function ShowPlate(text, shown)
+    local plate = text.plate
+    if not plate then
+        return
+    end
+    for _, piece in pairs(plate) do
+        if shown then
+            piece:Show()
+        else
+            piece:Hide()
+        end
+    end
+end
+
+-- Size and place the plate for the crit's current (popping) size.
+local function FitPlate(text, alpha)
+    local plate = text.plate
+    local size = text.shownSize or text.size
+    local scale = size / text.size
+    local iconWidth = text.hasIcon and (size + ICON_GAP) or 0
+    plate.middle:ClearAllPoints()
+    plate.middle:SetPoint("LEFT", text, "LEFT", -(iconWidth + PLATE_PAD_X), 0)
+    plate.middle:SetWidth(text.width * scale + iconWidth + PLATE_PAD_X * 2)
+    plate.middle:SetHeight(size * PLATE_HEIGHT)
+    plate.middle:SetAlpha(alpha)
+    plate.left:SetAlpha(alpha)
+    plate.right:SetAlpha(alpha)
+end
+
+local function Acquire(sticky)
+    local text = tremove(spare[sticky])
     if not text then
-        text = holder:CreateFontString(nil, "OVERLAY")
-        text.icon = holder:CreateTexture(nil, "OVERLAY")
+        local layer = sticky and critLayer or holder
+        text = layer:CreateFontString(nil, "OVERLAY")
+        text.icon = layer:CreateTexture(nil, "OVERLAY")
         text.icon:SetTexCoord(ICON_TRIM, 1 - ICON_TRIM, ICON_TRIM, 1 - ICON_TRIM)
         text.icon:SetPoint("RIGHT", text, "LEFT", -ICON_GAP, 0)
         text.icon:Hide()
+        if sticky then
+            text.plate = Plate(text)
+        end
     end
     return text
 end
@@ -58,9 +129,10 @@ local function Release(index)
     local text = tremove(active, index)
     text:Hide()
     text.icon:Hide()
+    ShowPlate(text, false)
     text.hasIcon = nil
     text.area = nil
-    tinsert(spare, text)
+    tinsert(spare[text.sticky], text)
 end
 
 local function CountIn(areaKey, sticky)
@@ -107,6 +179,26 @@ local function MakeRoom(areaKey, area, sticky, spacing, now)
     end
 end
 
+-- Where the crits are this frame: area key -> list of { y, half height, alpha }.
+local crits = {}
+
+local function Dimmed(alpha, areaKey, y, size)
+    local list = crits[areaKey]
+    if not list or not HST.db.critFocus then
+        return alpha
+    end
+    for _, crit in ipairs(list) do
+        local distance = y - crit.y
+        if distance < 0 then
+            distance = -distance
+        end
+        if distance < crit.half + size / 2 + DIM_MARGIN then
+            alpha = alpha * (1 - (1 - DIM_ALPHA) * crit.alpha)
+        end
+    end
+    return alpha
+end
+
 local function Place(text, area, now)
     local age = now - text.born
     local x, y, alpha = area.x, area.y, area.alpha or 1
@@ -134,6 +226,7 @@ local function Place(text, area, now)
         elseif progress > 1 - FADE_OUT then
             alpha = alpha * (1 - progress) / FADE_OUT
         end
+        alpha = Dimmed(alpha, text.area, y, text.size)
     end
     if alpha < 0 then
         alpha = 0
@@ -148,23 +241,48 @@ local function Place(text, area, now)
     if text.hasIcon then
         text.icon:SetAlpha(alpha)
     end
+    if text.sticky then
+        if HST.db.critFocus then
+            FitPlate(text, alpha)
+            ShowPlate(text, true)
+            local list = crits[text.area]
+            if not list then
+                list = {}
+                crits[text.area] = list
+            end
+            tinsert(list, { y = y, half = (text.shownSize or text.size) * PLATE_HEIGHT / 2, alpha = alpha })
+        else
+            ShowPlate(text, false)
+        end
+    end
 end
 
-holder:SetScript("OnUpdate", function()
-    local now = GetTime()
+local function Update(now, sticky)
     local areas = HST.db.areas
     local index = 1
     while index <= table.getn(active) do
         local text = active[index]
-        local area = areas[text.area]
-        local age = now - text.born
-        if not area or age >= text.duration or Travel(text, area, now) > area.height * 1.6 then
-            Release(index)
+        if text.sticky == sticky then
+            local area = areas[text.area]
+            local age = now - text.born
+            if not area or age >= text.duration or Travel(text, area, now) > area.height * 1.6 then
+                Release(index)
+            else
+                Place(text, area, now)
+                index = index + 1
+            end
         else
-            Place(text, area, now)
             index = index + 1
         end
     end
+end
+
+holder:SetScript("OnUpdate", function()
+    local now = GetTime()
+    -- Crits first, so the normal lines know where to fade.
+    crits = {}
+    Update(now, true)
+    Update(now, false)
     if table.getn(active) == 0 then
         this:Hide()
     end
@@ -188,10 +306,11 @@ function Display.Add(areaKey, message, r, g, b, sticky, size, icon)
     end
     MakeRoom(areaKey, area, sticky, size + GAP, now)
 
-    local text = Acquire()
+    local text = Acquire(sticky)
     text:SetFont(db.font, size, db.outline)
     text:SetJustifyH(area.align)
     text:SetText(message)
+    text.width = text:GetStringWidth() or (size * strlen(message) * 0.55)
     text:SetTextColor(r or 1, g or 1, b or 1)
     text.area = areaKey
     text.sticky = sticky
@@ -199,6 +318,7 @@ function Display.Add(areaKey, message, r, g, b, sticky, size, icon)
     text.settled = false
     text.born = now
     text.offset = 0
+    text.shownSize = size
     text.duration = sticky and STICKY_LIFE or area.duration
     text.hasIcon = icon and true or nil
     if icon then
