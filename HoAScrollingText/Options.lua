@@ -4,7 +4,7 @@ local HST = HoAScrollingText
 local Options = {}
 HST.Options = Options
 
-local WIDTH, HEIGHT = 440, 560
+local WIDTH, HEIGHT = 440, 584
 local window
 
 local function Apply()
@@ -146,20 +146,25 @@ local function Build()
     tinsert(window.boxes, CheckBox(window, "Show targets", 300, -46,
         function() return db().showTargets end, function(v) db().showTargets = v end))
 
+    tinsert(window.boxes, CheckBox(window, "Show spell icons", 24, -70,
+        function() return db().showIcons end, function(v) db().showIcons = v end))
+    tinsert(window.boxes, CheckBox(window, "Icon replaces spell name", 224, -70,
+        function() return db().iconReplacesName end, function(v) db().iconReplacesName = v end))
+
     local header = window:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -80)
+    header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -104)
     header:SetText("Show")
 
     for index, category in ipairs(HST.CATEGORIES) do
         local column = math.mod(index - 1, 2)
         local row = floor((index - 1) / 2)
         local key = category.key
-        tinsert(window.boxes, CheckBox(window, category.label, 24 + column * 200, -98 - row * 24,
+        tinsert(window.boxes, CheckBox(window, category.label, 24 + column * 200, -122 - row * 24,
             function() return db().categories[key] end,
             function(v) db().categories[key] = v end))
     end
 
-    local top = -98 - (floor((table.getn(HST.CATEGORIES) + 1) / 2)) * 24 - 24
+    local top = -122 - (floor((table.getn(HST.CATEGORIES) + 1) / 2)) * 24 - 24
     tinsert(window.sliders, Slider(window, "Text size", 30, top, 10, 40, 1,
         function() return db().fontSize end, function(v) db().fontSize = v end,
         function(v) return format("%d", v) end))
@@ -235,6 +240,7 @@ local HELP = {
     "/hst size <n> | critsize <n> - text sizes",
     "/hst min <n> - hide outgoing hits below n",
     "/hst names - show or hide spell names",
+    "/hst icons - show or hide spell icons; /hst icons forget clears learned icons",
     "/hst show - list what can be shown; /hst show <name> toggles it",
     "/hst reset - back to default settings",
 }
@@ -289,6 +295,17 @@ local function Slash(input)
     elseif command == "names" then
         db.showSpellNames = not db.showSpellNames
         HST.Print(db.showSpellNames and "Spell names shown." or "Spell names hidden.")
+        Apply()
+    elseif command == "icons" then
+        if strlower(rest or "") == "forget" then
+            HST.Icons.Forget()
+            HST.Print("Learned icons cleared.")
+            return
+        end
+        db.showIcons = not db.showIcons
+        local known, learned, weapons = HST.Icons.Summary()
+        HST.Print((db.showIcons and "Icons shown." or "Icons hidden.") .. " " .. known .. " known by name, "
+            .. learned .. " learned from the meter, " .. weapons .. " weapons in this run.")
         Apply()
     elseif command == "show" then
         local wanted = strlower(rest or "")

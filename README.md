@@ -7,6 +7,7 @@ Scrolling combat text for [Hordes of Azeroth](https://github.com/jonhaldors/hord
 - **Three scroll areas.** Outgoing on the right, Incoming on the left, Notifications above your character. Unlock them and drag them anywhere.
 - **Crits pop.** Critical hits and heals grow, settle in the middle of their area, then fade.
 - **Merging for hordes.** Hits from the same spell within a short window (0.4 s by default) are added into one number, like `2,345 Arcane Explosion x8`, so AoE against fifty mobs stays readable. Crits merge on their own, so they keep their pop.
+- **Spell icons from the game's damage meter.** The server tells the game's own meter each weapon's icon and name, and this addon reads the same messages. When a weapon casts a spell with a different name (Arcane Barrage casts Arcane Shot), the addon compares the meter's per-weapon damage with the combat log second by second, and learns which icon goes with that name. Learned icons are saved. Glyph, support and spellbook icons are used too.
 - **Colour by school.** Fire is orange, Frost is light blue, Shadow is purple, and so on. Incoming melee is red, heals are green, misses are grey.
 - **What it shows:** outgoing damage and DoTs, misses (dodge, parry, resist, immune and so on), pet damage, incoming damage, heals in both directions, power gains, buffs, debuffs and buff fades, killing blows, entering and leaving combat, and a low health warning. Each one can be turned on or off.
 - **Works in any client language.** The parser is built from the game's own combat log strings (`GlobalStrings`) when the addon loads, so it reads whatever language Hordes of Azeroth is set to.
@@ -31,6 +32,7 @@ Hordes of Azeroth has its own incoming damage numbers next to your character. To
 | `/hst size <n>`, `/hst critsize <n>` | Text sizes |
 | `/hst min <n>` | Hide outgoing hits below `n` damage |
 | `/hst names` | Show or hide spell names next to the numbers |
+| `/hst icons` | Show or hide spell icons, and say how many are known. `/hst icons forget` clears the learned ones |
 | `/hst show` | List every kind of text and whether it's on. `/hst show <name>` turns one on or off |
 | `/hst reset` | Go back to the default settings |
 
@@ -44,6 +46,7 @@ The Hordes of Azeroth client is a new client ([benilla](https://github.com/samwh
 | --- | --- |
 | `Core.lua` | Settings, defaults and helpers |
 | `Parser.lua` | Turns each `GlobalString` (such as `SPELLLOGSCHOOLSELFOTHER`, `"Your %s hits %s for %d %s damage."`) into a Lua pattern, and parses combat log lines into records: spell, source, target, amount, school, crit, and resist, block and absorb amounts |
+| `Icons.lua` | Reads the game's `BONK~` addon messages (`loadout`, `pw`, `state`, `glyphinfo`, `support`) to find each weapon's icon, and learns the icon for combat log names that differ from the weapon's name |
 | `Display.lua` | The scroll areas: animation, crit pops, keeping lines from overlapping, and the movers for unlock mode |
 | `Events.lua` | Listens to the combat events, picks colour, area and text for each record, and merges bursts of hits |
 | `Options.lua` | Slash commands and the options window |
@@ -52,7 +55,8 @@ The code follows the 1.12 Lua rules the client uses: the `this`, `event` and `ar
 
 ## Known limits
 
-- Spell icons aren't shown. The 1.12 API has no way to look up an icon from a spell name in the combat log.
+- Icons only cover your own weapons, glyphs, support effects and spellbook spells. Enemy spells have no icon: the 1.12 API can't look one up from a spell name.
+- A renamed weapon gets its icon after about two seconds of it doing damage on its own, the first time you use it. If two such weapons always hit at the same moment for the same damage, the addon can't tell them apart, so neither gets an icon.
 - The game's spell and glyph effects reach this addon only if the server reports them in the combat log. If some Hordes of Azeroth effect never shows up, that's why.
 - Chinese text needs a font that has Chinese characters. The fonts in the options window are the game's standard Latin fonts.
 

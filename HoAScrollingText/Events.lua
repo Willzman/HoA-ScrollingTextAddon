@@ -69,10 +69,13 @@ end
 
 -- What one record becomes on screen: category toggle, area, colour, a merge key and how to
 -- write it for a given total and hit count. Returns nil when it should not be shown.
-local function Describe(record)
+local function Describe(record, icon)
     local db = HST.db
     local kind, direction = record.kind, record.direction
     local label = db.showSpellNames and record.spell or nil
+    if icon and db.iconReplacesName then
+        label = nil
+    end
     if db.showTargets and record.target and direction ~= "in" then
         label = (label and (label .. " ") or "") .. "> " .. record.target
     end
@@ -101,7 +104,7 @@ local function Describe(record)
                 key = "pet" .. (name or ""), minimum = db.minOutgoing,
                 Text = function(total, count)
                     local text = HST.Comma(total)
-                    if db.showSpellNames and name then
+                    if db.showSpellNames and name and not (icon and db.iconReplacesName) then
                         text = text .. " " .. name
                     end
                     return count > 1 and (text .. " x" .. count) or text
@@ -198,7 +201,7 @@ ticker:Hide()
 
 local function Emit(view, total, count, crit)
     local color = view.color
-    HST.Display.Add(view.area, view.Text(total, count), color[1], color[2], color[3], crit)
+    HST.Display.Add(view.area, view.Text(total, count), color[1], color[2], color[3], crit, nil, view.icon)
 end
 
 local function Flush(force)
@@ -225,7 +228,11 @@ function Events.Show(record)
     if not record then
         return
     end
-    local view = Describe(record)
+    if record.kind == "damage" and (record.direction == "out" or record.direction == "pet") then
+        HST.Icons.NoteDamage(record.spell or record.source, record.amount)
+    end
+    local icon = HST.db.showIcons and HST.Icons.For(record.spell or (record.direction == "pet" and record.source)) or nil
+    local view = Describe(record, icon)
     if not view or not HST.Enabled(view.category) then
         return
     end
@@ -233,6 +240,7 @@ function Events.Show(record)
     if not view.noAmount and view.minimum and amount < view.minimum then
         return
     end
+    view.icon = icon
     local crit = record.crit and true or false
     local window = HST.db.mergeWindow or 0
     if view.noMerge or window <= 0 then

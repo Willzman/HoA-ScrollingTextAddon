@@ -49,11 +49,16 @@ HST.DEFAULTS = {
     -- Hordes of Azeroth fires a lot of AoE, so merging keeps the screen readable.
     mergeWindow = 0.4,
     showSpellNames = true,
+    -- Spell icons from the game's damage meter data; the name is dropped when there's an icon.
+    showIcons = true,
+    iconReplacesName = true,
     showTargets = false,
     -- Outgoing hits below this are dropped before merging into the screen.
     minOutgoing = 0,
     minIncoming = 0,
     lowHealthPercent = 30,
+    -- Combat log spell name -> icon, learned from the damage meter (see Icons.lua).
+    learnedIcons = {},
     categories = {
         outDamage = true, outDot = true, outMiss = true, outHeal = true, pet = true,
         inDamage = true, inMiss = true, inHeal = true, power = false,
