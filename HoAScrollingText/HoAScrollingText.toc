@@ -1,0 +1,11 @@
+## Interface: 11200
+## Title: HoA Scrolling Text
+## Notes: Scrolling combat text for Hordes of Azeroth: outgoing and incoming damage, heals, crits and notifications in movable scroll areas.
+## Author: willzman
+## Version: 0.1.0
+## SavedVariables: HoAScrollingTextDB
+Core.lua
+Parser.lua
+Display.lua
+Events.lua
+Options.lua
