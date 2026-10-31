@@ -16,6 +16,9 @@ local POW_SCALE = 1.6
 local FADE_IN = 0.05
 local FADE_OUT = 0.3
 local MOVER_WIDTH = 170
+local ICON_GAP = 3
+-- Trim the border every 1.12 icon has baked in.
+local ICON_TRIM = 0.07
 
 local holder = CreateFrame("Frame", "HoAScrollingTextFrame", UIParent)
 holder:SetFrameStrata("HIGH")
@@ -33,12 +36,20 @@ local function SetSize(text, size)
     else
         text:SetFont(HST.db.font, size, HST.db.outline)
     end
+    if text.hasIcon then
+        text.icon:SetWidth(size)
+        text.icon:SetHeight(size)
+    end
 end
 
 local function Acquire()
     local text = tremove(spare)
     if not text then
         text = holder:CreateFontString(nil, "OVERLAY")
+        text.icon = holder:CreateTexture(nil, "OVERLAY")
+        text.icon:SetTexCoord(ICON_TRIM, 1 - ICON_TRIM, ICON_TRIM, 1 - ICON_TRIM)
+        text.icon:SetPoint("RIGHT", text, "LEFT", -ICON_GAP, 0)
+        text.icon:Hide()
     end
     return text
 end
@@ -46,6 +57,8 @@ end
 local function Release(index)
     local text = tremove(active, index)
     text:Hide()
+    text.icon:Hide()
+    text.hasIcon = nil
     text.area = nil
     tinsert(spare, text)
 end
@@ -125,9 +138,16 @@ local function Place(text, area, now)
     if alpha < 0 then
         alpha = 0
     end
+    -- Left-aligned text keeps its icon inside the area: the icon sits on the anchor.
+    if text.hasIcon and area.align == "LEFT" then
+        x = x + text.size + ICON_GAP
+    end
     text:ClearAllPoints()
     text:SetPoint(area.align, UIParent, "CENTER", x, y)
     text:SetAlpha(alpha)
+    if text.hasIcon then
+        text.icon:SetAlpha(alpha)
+    end
 end
 
 holder:SetScript("OnUpdate", function()
@@ -150,8 +170,9 @@ holder:SetScript("OnUpdate", function()
     end
 end)
 
--- Show `message` in scroll area `areaKey`. `sticky` makes it a crit-style pop.
-function Display.Add(areaKey, message, r, g, b, sticky, size)
+-- Show `message` in scroll area `areaKey`. `sticky` makes it a crit-style pop; `icon` is a
+-- texture path shown left of the text.
+function Display.Add(areaKey, message, r, g, b, sticky, size, icon)
     local db = HST.db
     local area = db.areas[areaKey]
     if not area or not message then
@@ -179,6 +200,15 @@ function Display.Add(areaKey, message, r, g, b, sticky, size)
     text.born = now
     text.offset = 0
     text.duration = sticky and STICKY_LIFE or area.duration
+    text.hasIcon = icon and true or nil
+    if icon then
+        text.icon:SetTexture(icon)
+        text.icon:SetWidth(size)
+        text.icon:SetHeight(size)
+        text.icon:Show()
+    else
+        text.icon:Hide()
+    end
     tinsert(active, text)
     Place(text, area, now)
     text:Show()

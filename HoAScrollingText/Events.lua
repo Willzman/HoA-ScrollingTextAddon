@@ -67,12 +67,25 @@ local function Trailers(record)
     return parts
 end
 
+-- "Frostbolt 412", or for a merged burst "Arcane Explosion 612 (6x102)": the spell, the
+-- total, and how many hits for how much each.
+local function HitText(name, total, count)
+    local text = name and (name .. " " .. HST.Comma(total)) or HST.Comma(total)
+    if count > 1 then
+        text = text .. " (" .. count .. "x" .. HST.Comma(floor(total / count + 0.5)) .. ")"
+    end
+    return text
+end
+
 -- What one record becomes on screen: category toggle, area, colour, a merge key and how to
 -- write it for a given total and hit count. Returns nil when it should not be shown.
-local function Describe(record)
+local function Describe(record, icon)
     local db = HST.db
     local kind, direction = record.kind, record.direction
     local label = db.showSpellNames and record.spell or nil
+    if icon and db.iconReplacesName then
+        label = nil
+    end
     if db.showTargets and record.target and direction ~= "in" then
         label = (label and (label .. " ") or "") .. "> " .. record.target
     end
@@ -84,27 +97,22 @@ local function Describe(record)
                 category = category, area = "outgoing", color = SchoolColor(record, SCHOOL_COLORS[0]),
                 key = category .. (record.spell or "melee"), minimum = db.minOutgoing,
                 Text = function(total, count)
-                    local text = HST.Comma(total)
-                    if label then
-                        text = text .. " " .. label
-                    end
-                    if count > 1 then
-                        return text .. " x" .. count
-                    end
-                    return text .. Trailers(record)
+                    -- Plain weapon swings have no spell name in the log.
+                    local name = label or ((db.showSpellNames and not icon) and "Attack" or nil)
+                    local text = HitText(name, total, count)
+                    return count > 1 and text or (text .. Trailers(record))
                 end,
             }
         elseif direction == "pet" then
             local name = record.spell or record.source
+            if not db.showSpellNames or (icon and db.iconReplacesName) then
+                name = nil
+            end
             return {
                 category = "pet", area = "outgoing", color = PET,
-                key = "pet" .. (name or ""), minimum = db.minOutgoing,
+                key = "pet" .. (record.spell or record.source or ""), minimum = db.minOutgoing,
                 Text = function(total, count)
-                    local text = HST.Comma(total)
-                    if db.showSpellNames and name then
-                        text = text .. " " .. name
-                    end
-                    return count > 1 and (text .. " x" .. count) or text
+                    return HitText(name, total, count)
                 end,
             }
         else
@@ -198,7 +206,7 @@ ticker:Hide()
 
 local function Emit(view, total, count, crit)
     local color = view.color
-    HST.Display.Add(view.area, view.Text(total, count), color[1], color[2], color[3], crit)
+    HST.Display.Add(view.area, view.Text(total, count), color[1], color[2], color[3], crit, nil, view.icon)
 end
 
 local function Flush(force)
@@ -225,7 +233,11 @@ function Events.Show(record)
     if not record then
         return
     end
-    local view = Describe(record)
+    if record.kind == "damage" and (record.direction == "out" or record.direction == "pet") then
+        HST.Icons.NoteDamage(record.spell or record.source, record.amount)
+    end
+    local icon = HST.db.showIcons and HST.Icons.For(record.spell or (record.direction == "pet" and record.source)) or nil
+    local view = Describe(record, icon)
     if not view or not HST.Enabled(view.category) then
         return
     end
@@ -233,6 +245,7 @@ function Events.Show(record)
     if not view.noAmount and view.minimum and amount < view.minimum then
         return
     end
+    view.icon = icon
     local crit = record.crit and true or false
     local window = HST.db.mergeWindow or 0
     if view.noMerge or window <= 0 then

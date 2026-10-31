@@ -6,6 +6,7 @@
 ## SavedVariables: HoAScrollingTextDB
 Core.lua
 Parser.lua
+Icons.lua
 Display.lua
 Events.lua
 Options.lua

@@ -49,16 +49,23 @@ HST.DEFAULTS = {
     -- Hordes of Azeroth fires a lot of AoE, so merging keeps the screen readable.
     mergeWindow = 0.4,
     showSpellNames = true,
+    -- Spell icons from the game's damage meter data, shown before the spell name.
+    showIcons = true,
+    iconReplacesName = false,
     showTargets = false,
     -- Outgoing hits below this are dropped before merging into the screen.
     minOutgoing = 0,
     minIncoming = 0,
     lowHealthPercent = 30,
+    -- Combat log spell name -> icon, learned from the damage meter (see Icons.lua).
+    learnedIcons = {},
+    -- Out of the box: your own spells and what they hit for. The game already shows incoming
+    -- damage and has its own warnings, so the rest starts off; turn it on in /hst.
     categories = {
-        outDamage = true, outDot = true, outMiss = true, outHeal = true, pet = true,
-        inDamage = true, inMiss = true, inHeal = true, power = false,
-        buffGain = true, buffFade = false, debuff = true, kills = false,
-        combat = false, lowHealth = true,
+        outDamage = true, outDot = true, outMiss = false, outHeal = true, pet = true,
+        inDamage = false, inMiss = false, inHeal = false, power = false,
+        buffGain = false, buffFade = false, debuff = false, kills = false,
+        combat = false, lowHealth = false,
     },
     areas = {
         incoming = {
