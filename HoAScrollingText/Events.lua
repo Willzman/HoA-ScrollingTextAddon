@@ -67,6 +67,16 @@ local function Trailers(record)
     return parts
 end
 
+-- "Frostbolt 412", or for a merged burst "Arcane Explosion 612 (6x102)": the spell, the
+-- total, and how many hits for how much each.
+local function HitText(name, total, count)
+    local text = name and (name .. " " .. HST.Comma(total)) or HST.Comma(total)
+    if count > 1 then
+        text = text .. " (" .. count .. "x" .. HST.Comma(floor(total / count + 0.5)) .. ")"
+    end
+    return text
+end
+
 -- What one record becomes on screen: category toggle, area, colour, a merge key and how to
 -- write it for a given total and hit count. Returns nil when it should not be shown.
 local function Describe(record, icon)
@@ -87,27 +97,22 @@ local function Describe(record, icon)
                 category = category, area = "outgoing", color = SchoolColor(record, SCHOOL_COLORS[0]),
                 key = category .. (record.spell or "melee"), minimum = db.minOutgoing,
                 Text = function(total, count)
-                    local text = HST.Comma(total)
-                    if label then
-                        text = text .. " " .. label
-                    end
-                    if count > 1 then
-                        return text .. " x" .. count
-                    end
-                    return text .. Trailers(record)
+                    -- Plain weapon swings have no spell name in the log.
+                    local name = label or ((db.showSpellNames and not icon) and "Attack" or nil)
+                    local text = HitText(name, total, count)
+                    return count > 1 and text or (text .. Trailers(record))
                 end,
             }
         elseif direction == "pet" then
             local name = record.spell or record.source
+            if not db.showSpellNames or (icon and db.iconReplacesName) then
+                name = nil
+            end
             return {
                 category = "pet", area = "outgoing", color = PET,
-                key = "pet" .. (name or ""), minimum = db.minOutgoing,
+                key = "pet" .. (record.spell or record.source or ""), minimum = db.minOutgoing,
                 Text = function(total, count)
-                    local text = HST.Comma(total)
-                    if db.showSpellNames and name and not (icon and db.iconReplacesName) then
-                        text = text .. " " .. name
-                    end
-                    return count > 1 and (text .. " x" .. count) or text
+                    return HitText(name, total, count)
                 end,
             }
         else

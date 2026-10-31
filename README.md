@@ -4,9 +4,11 @@ Scrolling combat text for [Hordes of Azeroth](https://github.com/jonhaldors/hord
 
 ## Features
 
+Out of the box it shows one thing: **which of your spells hit, and for how much**. Each line reads like `Frostbolt 412`, with the spell's icon in front. When an AoE spell hits many enemies at once, the hits are added into one line such as `Arcane Explosion 612 (6x102)`: the total, then how many hits for how much each. Crits pop in larger text. Everything else below starts turned off and can be turned on in `/hst`.
+
 - **Three scroll areas.** Outgoing on the right, Incoming on the left, Notifications above your character. Unlock them and drag them anywhere.
 - **Crits pop.** Critical hits and heals grow, settle in the middle of their area, then fade.
-- **Merging for hordes.** Hits from the same spell within a short window (0.4 s by default) are added into one number, like `2,345 Arcane Explosion x8`, so AoE against fifty mobs stays readable. Crits merge on their own, so they keep their pop.
+- **Merging for hordes.** Hits from the same spell within a short window (0.4 s by default) are added into one line, like `Arcane Explosion 2,345 (8x293)`, so AoE against fifty mobs stays readable. Crits merge on their own, so they keep their pop.
 - **Spell icons from the game's damage meter.** The server tells the game's own meter each weapon's icon and name, and this addon reads the same messages. When a weapon casts a spell with a different name (Arcane Barrage casts Arcane Shot), the addon compares the meter's per-weapon damage with the combat log second by second, and learns which icon goes with that name. Learned icons are saved. Glyph, support and spellbook icons are used too.
 - **Colour by school.** Fire is orange, Frost is light blue, Shadow is purple, and so on. Incoming melee is red, heals are green, misses are grey.
 - **What it shows:** outgoing damage and DoTs, misses (dodge, parry, resist, immune and so on), pet damage, incoming damage, heals in both directions, power gains, buffs, debuffs and buff fades, killing blows, entering and leaving combat, and a low health warning. Each one can be turned on or off.
@@ -18,7 +20,7 @@ Scrolling combat text for [Hordes of Azeroth](https://github.com/jonhaldors/hord
 2. Copy the `HoAScrollingText` folder from this repository into it, so you have `benilla-config\AddOns\HoAScrollingText\HoAScrollingText.toc`.
 3. Start the game. Type `/hst test` to check that it's working.
 
-Hordes of Azeroth has its own incoming damage numbers next to your character. To avoid seeing incoming damage twice, turn off **incoming numbers** in the Hordes of Azeroth interface options, or turn off this addon's incoming damage with `/hst show inDamage`.
+Hordes of Azeroth already shows incoming damage next to your character, so this addon's incoming damage starts turned off. Turn it on with `/hst show inDamage` if you'd rather have it here; if you do, turn off **incoming numbers** in the Hordes of Azeroth interface options to avoid seeing it twice.
 
 ## Commands
 
