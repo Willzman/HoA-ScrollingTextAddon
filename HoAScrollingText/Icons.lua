@@ -214,9 +214,14 @@ local function KeepGlyphs()
     return kept
 end
 
+-- Every run learns its matches from scratch: nothing from the last run can carry a mistake over.
 handlers["start"] = function()
     weapons = KeepGlyphs()
     ResetLearning()
+    if HST.db then
+        HST.db.learnedWeapons = {}
+        HST.db.learnedIcons = {}
+    end
 end
 
 handlers["loadout"] = function(f)
