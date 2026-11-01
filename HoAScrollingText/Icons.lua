@@ -42,6 +42,9 @@ local STRIKES_TO_RULE_OUT = 1.5
 local IDLE_STRIKE = 1
 local EXPLAINED_STRIKE = 0.5
 local SECONDS_TO_SETTLE = 3
+-- A learned match is dropped (and learned again) after its weapon or glyph sits idle this many
+-- seconds while the name is hitting: a wrong match can't stick.
+local DOUBTS_TO_UNLEARN = 2
 
 -- Damage sources the meter counts: weapons by loadout index, glyphs as "g<id>".
 local weapons = {}       -- key -> { icon = path, name = weapon or glyph name }
@@ -54,6 +57,7 @@ local seen = {}          -- combat log name -> damage since the last state line
 local owners = {}        -- combat log name -> the summon that used it ("Bite" -> "Cat")
 local evidence = {}      -- combat log name -> { strikes = {}, votes = {}, seconds = n }
 local notWeapons = {}    -- names ruled out for every weapon this run (glyph procs and such)
+local doubts = {}        -- learned name -> seconds its weapon sat idle while the name hit
 
 -- A creature has no icon in 1.12, so each Hordes of Azeroth summon gets the icon that fits it,
 -- by its creature name (the server's English and Chinese names). Every icon here is one the game
@@ -192,6 +196,7 @@ local function ResetLearning()
     owners = {}
     evidence = {}
     notWeapons = {}
+    doubts = {}
 end
 
 local handlers = {}
@@ -332,7 +337,17 @@ local function Evaluate(deltas)
         unexplained[index] = delta
     end
     local unknown = {}
+    local learned = Learned()
     for name, amount in pairs(heard) do
+        -- Check a learned match against this second: its source should have moved too.
+        local guessed = not byWeapon[name] and learned and learned[name] and IndexOf(name)
+        if guessed and deltas[guessed] == 0 then
+            doubts[name] = (doubts[name] or 0) + 1
+            if doubts[name] >= DOUBTS_TO_UNLEARN then
+                learned[name] = nil
+                doubts[name] = nil
+            end
+        end
         local index = IndexOf(name) or IndexOf(heardOwners[name])
         if index then
             if unexplained[index] then

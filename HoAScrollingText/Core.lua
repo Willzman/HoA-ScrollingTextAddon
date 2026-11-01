@@ -116,11 +116,20 @@ local function Merge(saved, defaults)
     return saved
 end
 
+HST.LEARNED_VERSION = 2
+
 function HST.LoadSettings()
     if type(HoAScrollingTextDB) ~= "table" then
         HoAScrollingTextDB = {}
     end
     HST.db = Merge(HoAScrollingTextDB, HST.DEFAULTS)
+    -- Matches saved before glyphs could be matched were made without them as candidates, so a
+    -- glyph's spell (Windseeker's Shock) could have been pinned on a weapon. Start those over.
+    if (HST.db.learnedVersion or 1) < HST.LEARNED_VERSION then
+        HST.db.learnedWeapons = {}
+        HST.db.learnedIcons = {}
+        HST.db.learnedVersion = HST.LEARNED_VERSION
+    end
 end
 
 function HST.ResetSettings()
