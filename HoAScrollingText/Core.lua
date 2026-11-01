@@ -61,8 +61,10 @@ HST.DEFAULTS = {
     minOutgoing = 0,
     minIncoming = 0,
     lowHealthPercent = 30,
-    -- Combat log spell name -> icon, learned from the damage meter (see Icons.lua).
-    learnedIcons = {},
+    -- Show each hit under the name of the weapon behind it ("Call Pet" for your pet's bites).
+    weaponNames = true,
+    -- Combat log spell or creature name -> weapon name, learned from the damage meter (Icons.lua).
+    learnedWeapons = {},
     -- Out of the box: your own spells and what they hit for. The game already shows incoming
     -- damage and has its own warnings, so the rest starts off; turn it on in /hst.
     categories = {

@@ -82,7 +82,7 @@ end
 local function Describe(record, icon)
     local db = HST.db
     local kind, direction = record.kind, record.direction
-    local label = db.showSpellNames and record.spell or nil
+    local label = db.showSpellNames and (record.weapon or record.spell) or nil
     if icon and db.iconReplacesName then
         label = nil
     end
@@ -95,7 +95,9 @@ local function Describe(record, icon)
             local category = record.periodic and "outDot" or "outDamage"
             return {
                 category = category, area = "outgoing", color = SchoolColor(record, SCHOOL_COLORS[0]),
-                key = category .. (record.spell or "melee"), minimum = db.minOutgoing,
+                -- A weapon's hits and DoT ticks merge into one line under its name.
+                key = record.weapon and ("weapon" .. record.weapon) or (category .. (record.spell or "melee")),
+                minimum = db.minOutgoing,
                 Text = function(total, count)
                     -- Plain weapon swings have no spell name in the log.
                     local name = label or ((db.showSpellNames and not icon) and "Attack" or nil)
@@ -135,7 +137,7 @@ local function Describe(record, icon)
         local outgoing = direction == "out"
         return {
             category = outgoing and "outHeal" or "inHeal", area = outgoing and "outgoing" or "incoming",
-            color = HEAL, key = (outgoing and "oh" or "ih") .. (record.spell or ""),
+            color = HEAL, key = (outgoing and "oh" or "ih") .. (record.weapon or record.spell or ""),
             Text = function(total, count)
                 local text = "+" .. HST.Number(total)
                 if label then
@@ -247,7 +249,7 @@ local function IsMine(record)
     if not source then
         return false
     end
-    if HST.Icons.IsWeaponName(source) or source == UnitName("pet") then
+    if HST.Icons.Weapon(source) or source == UnitName("pet") then
         return true
     end
     if enemies[source] and not summons[source] then
@@ -275,12 +277,26 @@ function Events.Show(record)
     else
         NoteEnemies(record)
     end
-    if record.kind == "damage" and (record.direction == "out" or record.direction == "pet") then
-        HST.Icons.NoteDamage(record.spell or record.source, record.amount)
+    local yours = record.direction == "out" or record.direction == "pet"
+    if record.kind == "damage" and yours then
+        HST.Icons.NoteDamage(record.spell or record.source, record.amount, record.spell and record.source)
+    end
+    -- Name the hit after the weapon behind it: Arcane Shot is Arcane Barrage, and a pet's
+    -- swings, abilities and DoTs are all the Call Pet that summoned it.
+    local weapon, weaponIcon
+    if yours then
+        weapon, weaponIcon = HST.Icons.Weapon(record.spell)
+        if not weapon and record.direction == "pet" then
+            weapon, weaponIcon = HST.Icons.Weapon(record.source)
+        end
+    end
+    if weapon and HST.db.weaponNames then
+        record.weapon = weapon
+        record.direction = "out"
     end
     local icon
     if HST.db.showIcons then
-        icon = HST.Icons.For(record.spell)
+        icon = weaponIcon or HST.Icons.For(record.spell)
         if not icon and record.direction == "pet" then
             icon = HST.Icons.For(record.source)
         end

@@ -4,7 +4,7 @@ local HST = HoAScrollingText
 local Options = {}
 HST.Options = Options
 
-local WIDTH, HEIGHT = 440, 608
+local WIDTH, HEIGHT = 440, 632
 local window
 
 local function Apply()
@@ -156,20 +156,23 @@ local function Build()
     tinsert(window.boxes, CheckBox(window, "Short numbers (12.3k, 9.2m)", 224, -94,
         function() return db().shortNumbers end, function(v) db().shortNumbers = v end))
 
+    tinsert(window.boxes, CheckBox(window, "Name hits after your weapon (pets as Call Pet)", 24, -118,
+        function() return db().weaponNames end, function(v) db().weaponNames = v end))
+
     local header = window:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -128)
+    header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -152)
     header:SetText("Show")
 
     for index, category in ipairs(HST.CATEGORIES) do
         local column = math.mod(index - 1, 2)
         local row = floor((index - 1) / 2)
         local key = category.key
-        tinsert(window.boxes, CheckBox(window, category.label, 24 + column * 200, -146 - row * 24,
+        tinsert(window.boxes, CheckBox(window, category.label, 24 + column * 200, -170 - row * 24,
             function() return db().categories[key] end,
             function(v) db().categories[key] = v end))
     end
 
-    local top = -146 - (floor((table.getn(HST.CATEGORIES) + 1) / 2)) * 24 - 24
+    local top = -170 - (floor((table.getn(HST.CATEGORIES) + 1) / 2)) * 24 - 24
     tinsert(window.sliders, Slider(window, "Text size", 30, top, 10, 40, 1,
         function() return db().fontSize end, function(v) db().fontSize = v end,
         function(v) return format("%d", v) end))
@@ -246,7 +249,9 @@ local HELP = {
     "/hst min <n> - hide outgoing hits below n",
     "/hst names - show or hide spell names",
     "/hst short - switch between 12.3k and 12,345",
-    "/hst icons - show or hide spell icons; /hst icons forget clears learned icons",
+    "/hst icons - show or hide spell icons; /hst icons forget clears what was learned",
+    "/hst weapons - name hits after your weapons or after the combat log's spells",
+    "/hst weapons list - which combat log names were matched to which weapon",
     "/hst show - list what can be shown; /hst show <name> toggles it",
     "/hst reset - back to default settings",
 }
@@ -313,9 +318,19 @@ local function Slash(input)
             return
         end
         db.showIcons = not db.showIcons
-        local known, learned, weapons = HST.Icons.Summary()
-        HST.Print((db.showIcons and "Icons shown." or "Icons hidden.") .. " " .. known .. " known by name, "
-            .. learned .. " learned from the meter, " .. weapons .. " weapons in this run.")
+        local learned, weapons = HST.Icons.Summary()
+        HST.Print((db.showIcons and "Icons shown." or "Icons hidden.") .. " " .. learned
+            .. " names matched to weapons, " .. weapons .. " weapons in this run.")
+        Apply()
+    elseif command == "weapons" then
+        if strlower(rest or "") == "list" then
+            for name, weapon in pairs(db.learnedWeapons) do
+                HST.Print(name .. " -> " .. weapon)
+            end
+            return
+        end
+        db.weaponNames = not db.weaponNames
+        HST.Print(db.weaponNames and "Hits are named after your weapons." or "Hits use the combat log's spell names.")
         Apply()
     elseif command == "show" then
         local wanted = strlower(rest or "")

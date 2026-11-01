@@ -9,8 +9,8 @@ Out of the box it shows one thing: **which of your spells hit, and for how much*
 - **Three scroll areas.** Outgoing on the right, Incoming on the left, Notifications above your character. Unlock them and drag them anywhere.
 - **Crits pop, and stay readable.** Critical hits and heals grow, settle in the middle of their area, then fade. Normal hits fade almost away while they pass behind a crit, so the crit is easy to read. Turn this off with **Fade hits behind crits** in `/hst`.
 - **Merging for hordes.** Hits from the same spell within a short window (0.4 s by default) are added into one line, like `Arcane Explosion 2,345 (8x293)`, so AoE against fifty mobs stays readable. Crits merge on their own, so they keep their pop.
-- **Spell icons from the game's damage meter.** The server tells the game's own meter each weapon's icon and name, and this addon reads the same messages. When a weapon casts a spell with a different name (Arcane Barrage casts Arcane Shot), the addon compares the meter's per-weapon damage with the combat log second by second, and learns which icon goes with that name. Learned icons are saved. Glyph, support and spellbook icons are used too.
-- **Your summons count.** Hordes of Azeroth summons (Imp, Voidwalker, Infernal, totems and so on) aren't a normal pet as far as the game client is concerned, so their hits are logged like any creature's. The addon picks out the ones that are yours: a creature named after one of your weapons, or one that attacks an enemy you've been fighting. Their hits show in the outgoing area in orange, with the weapon's icon.
+- **Every hit under the weapon that made it.** The server tells the game's own meter each weapon's name, icon and damage every second, and this addon reads the same messages. Many weapons show up in the combat log under other names: Arcane Barrage casts Arcane Shot, and Call Pet's damage arrives as the beast's swings, its Bite and its Rake. The addon works out which weapon each of those names belongs to by watching whose meter damage moves with it, then shows the hit with that weapon's name and icon, so all of your pet's attacks, abilities and DoTs read as **Call Pet**. What it learns is saved. Glyphs, support effects and spellbook spells get their own icons.
+- **Your summons count.** Hordes of Azeroth summons (Imp, Voidwalker, Infernal, hunter pets, totems and so on) aren't a normal pet as far as the game client is concerned, so their hits are logged like any creature's. The addon picks out the ones that are yours: a creature named after one of your weapons, one already matched to a weapon, or one that attacks an enemy you've been fighting.
 - **Short numbers.** `12.3k`, `250k`, `9.2m` instead of `12,345`, `250,400`, `9,210,000`. Switch with `/hst short`.
 - **Colour by school.** Fire is orange, Frost is light blue, Shadow is purple, and so on. Incoming melee is red, heals are green, misses are grey.
 - **What it shows:** outgoing damage and DoTs, misses (dodge, parry, resist, immune and so on), pet damage, incoming damage, heals in both directions, power gains, buffs, debuffs and buff fades, killing blows, entering and leaving combat, and a low health warning. Each one can be turned on or off.
@@ -37,7 +37,8 @@ Hordes of Azeroth already shows incoming damage next to your character, so this 
 | `/hst min <n>` | Hide outgoing hits below `n` damage |
 | `/hst names` | Show or hide spell names next to the numbers |
 | `/hst short` | Switch between short numbers (`12.3k`) and full ones (`12,345`) |
-| `/hst icons` | Show or hide spell icons, and say how many are known. `/hst icons forget` clears the learned ones |
+| `/hst icons` | Show or hide spell icons. `/hst icons forget` clears what was learned |
+| `/hst weapons` | Name hits after your weapons (the default) or after the combat log's spell names. `/hst weapons list` shows which names were matched to which weapon |
 | `/hst show` | List every kind of text and whether it's on. `/hst show <name>` turns one on or off |
 | `/hst reset` | Go back to the default settings |
 
@@ -51,7 +52,7 @@ The Hordes of Azeroth client is a new client ([benilla](https://github.com/samwh
 | --- | --- |
 | `Core.lua` | Settings, defaults and helpers |
 | `Parser.lua` | Turns each `GlobalString` (such as `SPELLLOGSCHOOLSELFOTHER`, `"Your %s hits %s for %d %s damage."`) into a Lua pattern, and parses combat log lines into records: spell, source, target, amount, school, crit, and resist, block and absorb amounts |
-| `Icons.lua` | Reads the game's `BONK~` addon messages (`loadout`, `pw`, `state`, `glyphinfo`, `support`) to find each weapon's icon, and learns the icon for combat log names that differ from the weapon's name |
+| `Icons.lua` | Reads the game's `BONK~` addon messages (`loadout`, `pw`, `state`, `glyphinfo`, `support`) to know your weapons and their icons, and matches each combat log spell or creature name to the weapon whose per-second meter damage moves with it |
 | `Display.lua` | The scroll areas: animation, crit pops, keeping lines from overlapping, and the movers for unlock mode |
 | `Events.lua` | Listens to the combat events, picks colour, area and text for each record, and merges bursts of hits |
 | `Options.lua` | Slash commands and the options window |
@@ -63,7 +64,7 @@ The code follows the 1.12 Lua rules the client uses: the `this`, `event` and `ar
 - The client only logs fights between two creatures within 30 yards of you, so a summon fighting further away than that doesn't show. A summon's first hit on an enemy you haven't touched yet is also skipped, until the addon knows that enemy.
 
 - Icons only cover your own weapons, glyphs, support effects and spellbook spells. Enemy spells have no icon: the 1.12 API can't look one up from a spell name.
-- A renamed weapon gets its icon after about two seconds of it doing damage on its own, the first time you use it. If two such weapons always hit at the same moment for the same damage, the addon can't tell them apart, so neither gets an icon.
+- A weapon whose combat log name differs from its own name (or a new pet) shows under the combat log's name for its first few seconds, until the addon has matched it. If two such weapons always fire in the same seconds, it may take longer.
 - The game's spell and glyph effects reach this addon only if the server reports them in the combat log. If some Hordes of Azeroth effect never shows up, that's why.
 - Chinese text needs a font that has Chinese characters. The fonts in the options window are the game's standard Latin fonts.
 

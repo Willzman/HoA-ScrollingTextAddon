@@ -1,4 +1,5 @@
--- Spell icons, taken from what the Hordes of Azeroth server tells its own damage meter.
+-- Which of your weapons a combat log line belongs to, and its icon, worked out from what the
+-- Hordes of Azeroth server tells its own damage meter.
 --
 -- The server sends the game's addon `BONK~` lines over CHAT_MSG_SYSTEM:
 --   loadout~w:<icon>:<rank>:<max>,e:<icon>:...,p:<icon>:...~<slots>~<passive slots>
@@ -7,11 +8,23 @@
 --   glyphinfo~<id>~<name>~<icon>~...
 --   support~<icon>:<healed>:<absorbed>:<name>,...
 --
--- A weapon's combat log lines carry the name of the spell it casts, which is usually the
--- weapon's name ("Frostbolt") but not always (Arcane Barrage casts Arcane Shot). The names
--- that don't match are learned: the per-weapon damage in each state line is compared with
--- the damage the combat log showed for each unknown spell name over the same second. When one
--- weapon's share lines up twice, the name gets that weapon's icon and is remembered.
+-- A weapon's combat log lines carry the names of the spells and creatures behind it, which are
+-- often not the weapon's name: Arcane Barrage casts Arcane Shot, and Call Pet's damage arrives
+-- as the beast's swings, its Bite and its DoTs. The meter's per-weapon damage counts all of it
+-- (pets and DoTs are credited to the weapon that made them), so each unknown name is matched to
+-- the weapon whose damage moves with it:
+--   * a weapon whose meter total didn't move in a second where the name did damage gets a
+--     strike; one whose damage its known names already explain gets half a strike. A strike
+--     and a half rules it out (a hit can land either side of a state line);
+--   * when the amounts match closely, or only one weapon had damage nothing else explains,
+--     that weapon gets a vote.
+-- One weapon left, or two votes for a weapon without strikes, and the name is learned and
+-- saved. The meter caps a killing blow at the health the enemy had left while the log shows
+-- the whole hit, so amounts only ever vote.
+--
+-- A summon's abilities belong to the summon: "Cat's Bite" counts as Cat's weapon's damage.
+-- Glyph and support names (the server names them in glyphinfo and support lines) are kept out:
+-- glyphs are built to overkill, so their hits would only muddy the numbers.
 
 local HST = HoAScrollingText
 local Icons = {}
@@ -23,14 +36,20 @@ local QUESTION = "INV_Misc_QuestionMark"
 local MATCH_SHARE = 0.12
 local MATCH_SLACK = 3
 local VOTES_TO_LEARN = 2
+local STRIKES_TO_RULE_OUT = 1.5
+local IDLE_STRIKE = 1
+local EXPLAINED_STRIKE = 0.5
+local SECONDS_TO_SETTLE = 3
 
 local weapons = {}       -- index -> { icon = path, name = weapon name }
-local byName = {}        -- spell name -> icon path, from the game's own lists
-local nameIndex = {}     -- spell name -> weapon index, for the names we already know
+local byWeapon = {}      -- weapon name -> index, this run
+local byName = {}        -- other names with an icon: glyphs, support, spellbook
+local notOurs = {}       -- glyph and support names: the server counts those apart from weapons
 local lastDamage = {}    -- weapon index -> meter damage at the last state line
-local seen = {}          -- spell name -> combat log damage since the last state line
-local votes = {}         -- spell name -> { [weapon index] = count }
-local weaponNames = {}   -- this run's weapon names; a summon weapon is named after its creature
+local seen = {}          -- combat log name -> damage since the last state line
+local owners = {}        -- combat log name -> the summon that used it ("Bite" -> "Cat")
+local evidence = {}      -- combat log name -> { strikes = {}, votes = {}, seconds = n }
+local notWeapons = {}    -- names ruled out for every weapon this run (glyph procs and such)
 
 local function Path(icon)
     if not icon or icon == "" or icon == QUESTION then
@@ -57,49 +76,79 @@ local function Split(text, separator)
 end
 
 local function Learned()
-    return HST.db and HST.db.learnedIcons
+    return HST.db and HST.db.learnedWeapons
 end
 
-function Icons.IsWeaponName(name)
-    return name and weaponNames[name] or false
+-- The weapon a combat log name belongs to in this run: its index, or nil.
+local function IndexOf(name)
+    if not name then
+        return nil
+    end
+    local index = byWeapon[name]
+    if index then
+        return index
+    end
+    local learned = Learned()
+    local weapon = learned and learned[name]
+    return weapon and byWeapon[weapon]
 end
 
--- The icon for a combat log spell (or pet) name, or nil.
+-- The weapon behind a combat log spell or creature name: weapon name, icon. Nil if unknown.
+function Icons.Weapon(name)
+    local index = IndexOf(name)
+    local weapon = index and weapons[index]
+    if weapon and weapon.name then
+        return weapon.name, weapon.icon
+    end
+    return nil
+end
+
+-- An icon for any name: a weapon's, then glyphs, support effects and the spellbook.
 function Icons.For(name)
     if not name then
         return nil
     end
-    local icon = byName[name]
+    local _, icon = Icons.Weapon(name)
     if icon then
         return icon
     end
-    local learned = Learned()
-    return learned and learned[name]
+    if byName[name] then
+        return byName[name]
+    end
+    -- Saved by older versions, which learned icons but not weapons.
+    local old = HST.db and HST.db.learnedIcons
+    return old and old[name]
 end
 
-local function Remember(name, icon, index)
+function Icons.IsWeaponName(name)
+    return name and byWeapon[name] and true or false
+end
+
+local function Remember(name, icon)
+    if not name or name == "" then
+        return
+    end
+    notOurs[name] = true
     local path = Path(icon)
-    if name and name ~= "" and path then
+    if path then
         byName[name] = path
-        if index then
-            nameIndex[name] = index
-        end
     end
 end
 
-local function ResetRun()
-    weapons = {}
-    weaponNames = {}
-    nameIndex = {}
+local function ResetLearning()
     lastDamage = {}
     seen = {}
-    votes = {}
+    owners = {}
+    evidence = {}
+    notWeapons = {}
 end
 
 local handlers = {}
 
 handlers["start"] = function()
-    ResetRun()
+    weapons = {}
+    byWeapon = {}
+    ResetLearning()
 end
 
 handlers["loadout"] = function(f)
@@ -111,21 +160,23 @@ handlers["loadout"] = function(f)
             index = index + 1
             local old = weapons[index]
             local path = Path(parts[2])
-            -- A slot whose icon changed holds a new or evolved weapon: forget its old name.
+            -- A slot whose icon changed holds a new or evolved weapon: its name comes next.
             if old and old.icon == path then
                 fresh[index] = old
             else
                 fresh[index] = { icon = path }
-                lastDamage[index] = nil
             end
         end
     end
     weapons = fresh
-    for name, at in pairs(nameIndex) do
-        if not weapons[at] or weapons[at].name ~= name then
-            nameIndex[name] = nil
+    byWeapon = {}
+    for at, weapon in pairs(weapons) do
+        if weapon.name then
+            byWeapon[weapon.name] = at
         end
     end
+    -- What's being matched against changed: start the evidence again.
+    ResetLearning()
 end
 
 handlers["pw"] = function(f)
@@ -133,8 +184,7 @@ handlers["pw"] = function(f)
     local weapon = index and weapons[index]
     if weapon and f[3] and f[3] ~= "" then
         weapon.name = f[3]
-        weaponNames[f[3]] = true
-        Remember(f[3], weapon.icon and weapon.icon or nil, index)
+        byWeapon[f[3]] = index
     end
 end
 
@@ -149,27 +199,6 @@ handlers["support"] = function(f)
     end
 end
 
-local function Vote(name, index)
-    local learned = Learned()
-    local weapon = weapons[index]
-    if not learned or not weapon or not weapon.icon then
-        return
-    end
-    votes[name] = votes[name] or {}
-    -- A clash with another weapon starts the count again.
-    for other in pairs(votes[name]) do
-        if other ~= index then
-            votes[name] = {}
-            break
-        end
-    end
-    votes[name][index] = (votes[name][index] or 0) + 1
-    if votes[name][index] >= VOTES_TO_LEARN then
-        learned[name] = weapon.icon
-        nameIndex[name] = index
-    end
-end
-
 local function Close(a, b)
     local difference = a - b
     if difference < 0 then
@@ -178,57 +207,127 @@ local function Close(a, b)
     return difference <= MATCH_SLACK or difference <= a * MATCH_SHARE
 end
 
+local function Evidence(name)
+    local entry = evidence[name]
+    if not entry then
+        entry = { strikes = {}, votes = {}, seconds = 0 }
+        evidence[name] = entry
+    end
+    return entry
+end
+
+local function Learn(name, index)
+    local learned = Learned()
+    local weapon = weapons[index]
+    if learned and weapon and weapon.name then
+        learned[name] = weapon.name
+    end
+    evidence[name] = nil
+end
+
+-- Settle a name once the evidence points at one weapon.
+local function Decide(name, deltas)
+    local entry = evidence[name]
+    local left, count = nil, 0
+    for index in pairs(deltas) do
+        if (entry.strikes[index] or 0) < STRIKES_TO_RULE_OUT then
+            left, count = index, count + 1
+        end
+    end
+    if count == 0 then
+        notWeapons[name] = true
+        evidence[name] = nil
+        return
+    end
+    if count == 1 and entry.seconds >= SECONDS_TO_SETTLE then
+        Learn(name, left)
+        return
+    end
+    for index, votes in pairs(entry.votes) do
+        if votes >= VOTES_TO_LEARN and not entry.strikes[index] then
+            Learn(name, index)
+            return
+        end
+    end
+end
+
 handlers["state"] = function(f)
     local totals = f[13] and Split(f[13], ",") or {}
-    local remaining = {}
+    local deltas = {}
     local reset = false
     for index in pairs(weapons) do
         local damage = tonumber((Split(totals[index] or "", ":"))[1] or "")
         if damage then
             local before = lastDamage[index]
             if before and damage >= before then
-                remaining[index] = damage - before
+                deltas[index] = damage - before
             elseif before then
                 reset = true
             end
             lastDamage[index] = damage
         end
     end
-    if reset then
-        seen = {}
+    local heard, heardOwners = seen, owners
+    seen, owners = {}, {}
+    if reset or not next(deltas) then
         return
     end
 
-    -- Take out what the names we already know account for, then match what's left.
+    -- What each weapon did that its known names don't account for.
+    local unexplained = {}
+    for index, delta in pairs(deltas) do
+        unexplained[index] = delta
+    end
     local unknown = {}
-    for name, amount in pairs(seen) do
-        local index = nameIndex[name]
-        if index and remaining[index] then
-            remaining[index] = remaining[index] - amount
-        elseif not Icons.For(name) then
+    for name, amount in pairs(heard) do
+        local index = IndexOf(name) or IndexOf(heardOwners[name])
+        if index then
+            if unexplained[index] then
+                unexplained[index] = unexplained[index] - amount
+            end
+        elseif not notWeapons[name] then
             tinsert(unknown, name)
         end
     end
-    for _, name in ipairs(unknown) do
-        local amount = seen[name]
-        local match, count = nil, 0
-        for index, left in pairs(remaining) do
-            if left > 0 and Close(left, amount) then
-                match, count = index, count + 1
-            end
-        end
-        if count == 1 then
-            Vote(name, match)
-            remaining[match] = remaining[match] - amount
+
+    local busy, busyCount = nil, 0
+    for index, left in pairs(unexplained) do
+        if left > MATCH_SLACK then
+            busy, busyCount = index, busyCount + 1
         end
     end
-    seen = {}
+
+    for _, name in ipairs(unknown) do
+        local amount = heard[name]
+        local entry = Evidence(name)
+        entry.seconds = entry.seconds + 1
+        local close, closeCount = nil, 0
+        for index, delta in pairs(deltas) do
+            if delta <= 0 then
+                entry.strikes[index] = (entry.strikes[index] or 0) + IDLE_STRIKE
+            elseif unexplained[index] <= MATCH_SLACK then
+                entry.strikes[index] = (entry.strikes[index] or 0) + EXPLAINED_STRIKE
+            elseif Close(unexplained[index], amount) then
+                close, closeCount = index, closeCount + 1
+            end
+        end
+        if closeCount == 1 then
+            entry.votes[close] = (entry.votes[close] or 0) + 1
+        elseif busyCount == 1 then
+            entry.votes[busy] = (entry.votes[busy] or 0) + 1
+        end
+        Decide(name, deltas)
+    end
 end
 
--- Events.lua reports every outgoing damage line here, so the next state line can be checked.
-function Icons.NoteDamage(name, amount)
-    if name and amount and amount > 0 and table.getn(weapons) > 0 then
+-- Events.lua reports every outgoing and summon damage line here, by spell or creature name;
+-- `owner` is the summon behind an ability, if any.
+function Icons.NoteDamage(name, amount, owner)
+    if name and amount and amount > 0 and next(weapons) and not notOurs[name] then
         seen[name] = (seen[name] or 0) + amount
+        if owner and owner ~= name then
+            owners[name] = owner
+        end
     end
 end
 
@@ -239,7 +338,7 @@ function Icons.ScanSpellbook()
     end
     local book = BOOKTYPE_SPELL or "spell"
     local index = 1
-    while true do
+    while index <= 1024 do
         local name = GetSpellName(index, book)
         if not name then
             break
@@ -249,28 +348,27 @@ function Icons.ScanSpellbook()
             byName[name] = texture
         end
         index = index + 1
-        if index > 1024 then
-            break
-        end
     end
 end
 
 function Icons.Summary()
-    local known, learned = 0, 0
-    for _ in pairs(byName) do
-        known = known + 1
-    end
+    local learned, weaponCount = 0, 0
     for _ in pairs(Learned() or {}) do
         learned = learned + 1
     end
-    return known, learned, table.getn(weapons)
+    for _ in pairs(weapons) do
+        weaponCount = weaponCount + 1
+    end
+    return learned, weaponCount
 end
 
 function Icons.Forget()
     if HST.db then
+        HST.db.learnedWeapons = {}
         HST.db.learnedIcons = {}
     end
-    votes = {}
+    evidence = {}
+    notWeapons = {}
 end
 
 local frame = CreateFrame("Frame")
