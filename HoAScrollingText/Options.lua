@@ -153,6 +153,8 @@ local function Build()
 
     tinsert(window.boxes, CheckBox(window, "Fade hits behind crits", 24, -94,
         function() return db().critFocus end, function(v) db().critFocus = v end))
+    tinsert(window.boxes, CheckBox(window, "Short numbers (12.3k, 9.2m)", 224, -94,
+        function() return db().shortNumbers end, function(v) db().shortNumbers = v end))
 
     local header = window:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -128)
@@ -243,6 +245,7 @@ local HELP = {
     "/hst size <n> | critsize <n> - text sizes",
     "/hst min <n> - hide outgoing hits below n",
     "/hst names - show or hide spell names",
+    "/hst short - switch between 12.3k and 12,345",
     "/hst icons - show or hide spell icons; /hst icons forget clears learned icons",
     "/hst show - list what can be shown; /hst show <name> toggles it",
     "/hst reset - back to default settings",
@@ -298,6 +301,10 @@ local function Slash(input)
     elseif command == "names" then
         db.showSpellNames = not db.showSpellNames
         HST.Print(db.showSpellNames and "Spell names shown." or "Spell names hidden.")
+        Apply()
+    elseif command == "short" then
+        db.shortNumbers = not db.shortNumbers
+        HST.Print(db.shortNumbers and "Short numbers (12.3k)." or "Full numbers (12,345).")
         Apply()
     elseif command == "icons" then
         if strlower(rest or "") == "forget" then

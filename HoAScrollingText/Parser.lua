@@ -55,6 +55,8 @@ local OUT_SPELLS = {
 
 local OUT_PERIODIC = {
     { "PERIODICAURADAMAGESELFOTHER", "%s suffers %d %s damage from your %s.", "damage", "out", { "target", "amount", "school", "spell" }, periodic = true },
+    -- A creature's DoT on another creature: maybe one of your summons (Events.lua decides).
+    { "PERIODICAURADAMAGEOTHEROTHER", "%s suffers %d %s damage from %s's %s.", "damage", "other", { "target", "amount", "school", "source", "spell" }, periodic = true },
 }
 
 local OUT_SHIELDS = {
@@ -162,6 +164,14 @@ local KILLS = {
 }
 
 -- Combat log event -> the families of lines it can carry.
+-- Hordes of Azeroth summons (Imp, Voidwalker, Infernal, totems...) are owned through the
+-- summoned-by field, not created-by, so the client logs them as plain creatures rather than
+-- as your pet. Their lines are the creature-vs-creature ones, read with the same sentences.
+local CREATURE_DAMAGE = {}
+for _, entry in ipairs(PET_DAMAGE) do
+    tinsert(CREATURE_DAMAGE, { entry[1], entry[2], entry[3], "other", entry[5], crit = entry.crit })
+end
+
 local EVENT_LISTS = {
     CHAT_MSG_COMBAT_SELF_HITS = { OUT_HITS, ENVIRONMENT },
     CHAT_MSG_COMBAT_SELF_MISSES = { OUT_MISSES },
@@ -171,6 +181,8 @@ local EVENT_LISTS = {
     CHAT_MSG_SPELL_DAMAGESHIELDS_ON_SELF = { OUT_SHIELDS },
     CHAT_MSG_COMBAT_PET_HITS = { PET_DAMAGE },
     CHAT_MSG_SPELL_PET_DAMAGE = { PET_DAMAGE },
+    CHAT_MSG_COMBAT_CREATURE_VS_CREATURE_HITS = { CREATURE_DAMAGE },
+    CHAT_MSG_SPELL_CREATURE_VS_CREATURE_DAMAGE = { CREATURE_DAMAGE },
 
     CHAT_MSG_COMBAT_CREATURE_VS_SELF_HITS = { IN_HITS, ENVIRONMENT },
     CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS = { IN_HITS },

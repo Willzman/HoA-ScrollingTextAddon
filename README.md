@@ -10,6 +10,8 @@ Out of the box it shows one thing: **which of your spells hit, and for how much*
 - **Crits pop, and stay readable.** Critical hits and heals grow, settle in the middle of their area, then fade. Normal hits fade almost away while they pass behind a crit, so the crit is easy to read. Turn this off with **Fade hits behind crits** in `/hst`.
 - **Merging for hordes.** Hits from the same spell within a short window (0.4 s by default) are added into one line, like `Arcane Explosion 2,345 (8x293)`, so AoE against fifty mobs stays readable. Crits merge on their own, so they keep their pop.
 - **Spell icons from the game's damage meter.** The server tells the game's own meter each weapon's icon and name, and this addon reads the same messages. When a weapon casts a spell with a different name (Arcane Barrage casts Arcane Shot), the addon compares the meter's per-weapon damage with the combat log second by second, and learns which icon goes with that name. Learned icons are saved. Glyph, support and spellbook icons are used too.
+- **Your summons count.** Hordes of Azeroth summons (Imp, Voidwalker, Infernal, totems and so on) aren't a normal pet as far as the game client is concerned, so their hits are logged like any creature's. The addon picks out the ones that are yours: a creature named after one of your weapons, or one that attacks an enemy you've been fighting. Their hits show in the outgoing area in orange, with the weapon's icon.
+- **Short numbers.** `12.3k`, `250k`, `9.2m` instead of `12,345`, `250,400`, `9,210,000`. Switch with `/hst short`.
 - **Colour by school.** Fire is orange, Frost is light blue, Shadow is purple, and so on. Incoming melee is red, heals are green, misses are grey.
 - **What it shows:** outgoing damage and DoTs, misses (dodge, parry, resist, immune and so on), pet damage, incoming damage, heals in both directions, power gains, buffs, debuffs and buff fades, killing blows, entering and leaving combat, and a low health warning. Each one can be turned on or off.
 - **Works in any client language.** The parser is built from the game's own combat log strings (`GlobalStrings`) when the addon loads, so it reads whatever language Hordes of Azeroth is set to.
@@ -34,6 +36,7 @@ Hordes of Azeroth already shows incoming damage next to your character, so this 
 | `/hst size <n>`, `/hst critsize <n>` | Text sizes |
 | `/hst min <n>` | Hide outgoing hits below `n` damage |
 | `/hst names` | Show or hide spell names next to the numbers |
+| `/hst short` | Switch between short numbers (`12.3k`) and full ones (`12,345`) |
 | `/hst icons` | Show or hide spell icons, and say how many are known. `/hst icons forget` clears the learned ones |
 | `/hst show` | List every kind of text and whether it's on. `/hst show <name>` turns one on or off |
 | `/hst reset` | Go back to the default settings |
@@ -56,6 +59,8 @@ The Hordes of Azeroth client is a new client ([benilla](https://github.com/samwh
 The code follows the 1.12 Lua rules the client uses: the `this`, `event` and `arg1` globals, `table.getn` instead of `#`, and no `...` varargs.
 
 ## Known limits
+
+- The client only logs fights between two creatures within 30 yards of you, so a summon fighting further away than that doesn't show. A summon's first hit on an enemy you haven't touched yet is also skipped, until the addon knows that enemy.
 
 - Icons only cover your own weapons, glyphs, support effects and spellbook spells. Enemy spells have no icon: the 1.12 API can't look one up from a spell name.
 - A renamed weapon gets its icon after about two seconds of it doing damage on its own, the first time you use it. If two such weapons always hit at the same moment for the same damage, the addon can't tell them apart, so neither gets an icon.

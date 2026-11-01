@@ -30,6 +30,7 @@ local nameIndex = {}     -- spell name -> weapon index, for the names we already
 local lastDamage = {}    -- weapon index -> meter damage at the last state line
 local seen = {}          -- spell name -> combat log damage since the last state line
 local votes = {}         -- spell name -> { [weapon index] = count }
+local weaponNames = {}   -- this run's weapon names; a summon weapon is named after its creature
 
 local function Path(icon)
     if not icon or icon == "" or icon == QUESTION then
@@ -59,6 +60,10 @@ local function Learned()
     return HST.db and HST.db.learnedIcons
 end
 
+function Icons.IsWeaponName(name)
+    return name and weaponNames[name] or false
+end
+
 -- The icon for a combat log spell (or pet) name, or nil.
 function Icons.For(name)
     if not name then
@@ -84,6 +89,7 @@ end
 
 local function ResetRun()
     weapons = {}
+    weaponNames = {}
     nameIndex = {}
     lastDamage = {}
     seen = {}
@@ -127,6 +133,7 @@ handlers["pw"] = function(f)
     local weapon = index and weapons[index]
     if weapon and f[3] and f[3] ~= "" then
         weapon.name = f[3]
+        weaponNames[f[3]] = true
         Remember(f[3], weapon.icon and weapon.icon or nil, index)
     end
 end

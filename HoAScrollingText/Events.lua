@@ -56,13 +56,13 @@ local function Trailers(record)
         parts = parts .. " " .. "Glancing"
     end
     if type(record.resisted) == "number" then
-        parts = parts .. " (" .. HST.Comma(record.resisted) .. " " .. Word("RESIST") .. ")"
+        parts = parts .. " (" .. HST.Number(record.resisted) .. " " .. Word("RESIST") .. ")"
     end
     if type(record.blocked) == "number" then
-        parts = parts .. " (" .. HST.Comma(record.blocked) .. " " .. Word("BLOCK") .. ")"
+        parts = parts .. " (" .. HST.Number(record.blocked) .. " " .. Word("BLOCK") .. ")"
     end
     if type(record.absorbed) == "number" then
-        parts = parts .. " (" .. HST.Comma(record.absorbed) .. " " .. Word("ABSORB") .. ")"
+        parts = parts .. " (" .. HST.Number(record.absorbed) .. " " .. Word("ABSORB") .. ")"
     end
     return parts
 end
@@ -70,9 +70,9 @@ end
 -- "Frostbolt 412", or for a merged burst "Arcane Explosion 612 (6x102)": the spell, the
 -- total, and how many hits for how much each.
 local function HitText(name, total, count)
-    local text = name and (name .. " " .. HST.Comma(total)) or HST.Comma(total)
+    local text = name and (name .. " " .. HST.Number(total)) or HST.Number(total)
     if count > 1 then
-        text = text .. " (" .. count .. "x" .. HST.Comma(floor(total / count + 0.5)) .. ")"
+        text = text .. " (" .. count .. "x" .. HST.Number(floor(total / count + 0.5)) .. ")"
     end
     return text
 end
@@ -120,7 +120,7 @@ local function Describe(record, icon)
                 category = "inDamage", area = "incoming", color = SchoolColor(record, INCOMING_PHYSICAL),
                 key = "in" .. (record.spell or "melee"), minimum = db.minIncoming,
                 Text = function(total, count)
-                    local text = "-" .. HST.Comma(total)
+                    local text = "-" .. HST.Number(total)
                     if label then
                         text = text .. " " .. label
                     end
@@ -137,7 +137,7 @@ local function Describe(record, icon)
             category = outgoing and "outHeal" or "inHeal", area = outgoing and "outgoing" or "incoming",
             color = HEAL, key = (outgoing and "oh" or "ih") .. (record.spell or ""),
             Text = function(total, count)
-                local text = "+" .. HST.Comma(total)
+                local text = "+" .. HST.Number(total)
                 if label then
                     text = text .. " " .. label
                 end
@@ -162,7 +162,7 @@ local function Describe(record, icon)
         return {
             category = "power", area = "incoming", color = POWER, key = "pw" .. (record.power or ""),
             Text = function(total, count)
-                local text = "+" .. HST.Comma(total) .. " " .. (record.power or "")
+                local text = "+" .. HST.Number(total) .. " " .. (record.power or "")
                 return count > 1 and (text .. " x" .. count) or text
             end,
         }
@@ -229,14 +229,62 @@ ticker:SetScript("OnUpdate", function()
     Flush(false)
 end)
 
+-- Whose is a creature-vs-creature line? Enemies are the names you hit and the names that hit
+-- you; your summons are named after their weapon ("Imp"), or are whatever attacks an enemy.
+local enemies = {}
+local summons = {}
+
+local function NoteEnemies(record)
+    if record.direction == "out" and record.target then
+        enemies[record.target] = true
+    elseif record.direction == "in" and record.source then
+        enemies[record.source] = true
+    end
+end
+
+local function IsMine(record)
+    local source, target = record.source, record.target
+    if not source then
+        return false
+    end
+    if HST.Icons.IsWeaponName(source) or source == UnitName("pet") then
+        return true
+    end
+    if enemies[source] and not summons[source] then
+        return false
+    end
+    if summons[source] then
+        return not summons[target]
+    end
+    if target and enemies[target] then
+        summons[source] = true
+        return true
+    end
+    return false
+end
+
 function Events.Show(record)
     if not record then
         return
     end
+    if record.direction == "other" then
+        if not IsMine(record) then
+            return
+        end
+        record.direction = "pet"
+    else
+        NoteEnemies(record)
+    end
     if record.kind == "damage" and (record.direction == "out" or record.direction == "pet") then
         HST.Icons.NoteDamage(record.spell or record.source, record.amount)
     end
-    local icon = HST.db.showIcons and HST.Icons.For(record.spell or (record.direction == "pet" and record.source)) or nil
+    local icon
+    if HST.db.showIcons then
+        icon = HST.Icons.For(record.spell)
+        if not icon and record.direction == "pet" then
+            icon = HST.Icons.For(record.source)
+        end
+    end
     local view = Describe(record, icon)
     if not view or not HST.Enabled(view.category) then
         return
@@ -282,7 +330,7 @@ local function CheckHealth()
     local current = UnitHealth("player")
     local below = current / maximum * 100 < HST.db.lowHealthPercent
     if below and not lowHealth and current > 0 and HST.Enabled("lowHealth") then
-        Events.Notify("Low Health! " .. HST.Comma(current), WARNING, true)
+        Events.Notify("Low Health! " .. HST.Number(current), WARNING, true)
     end
     lowHealth = below
 end

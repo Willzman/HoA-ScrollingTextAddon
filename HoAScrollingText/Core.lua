@@ -54,6 +54,8 @@ HST.DEFAULTS = {
     iconReplacesName = false,
     -- Normal lines fade out while they pass behind a crit.
     critFocus = true,
+    -- 12.3k, 250k, 9.2m instead of 12,345, 250,400, 9,210,000.
+    shortNumbers = true,
     showTargets = false,
     -- Outgoing hits below this are dropped before merging into the screen.
     minOutgoing = 0,
@@ -126,6 +128,43 @@ function HST.Print(message)
     if DEFAULT_CHAT_FRAME then
         DEFAULT_CHAT_FRAME:AddMessage(HST.CHAT_PREFIX .. message)
     end
+end
+
+local SHORT_UNITS = { { 1000000000, "b" }, { 1000000, "m" }, { 1000, "k" } }
+
+-- 950 -> "950", 12345 -> "12.3k", 250400 -> "250k", 9210000 -> "9.2m". One decimal below 100
+-- of a unit, none above; 999,960 rounds up to "1m", not "1000k".
+function HST.Short(number)
+    local sign = ""
+    if number < 0 then
+        sign, number = "-", -number
+    end
+    for index, unit in ipairs(SHORT_UNITS) do
+        local value = number / unit[1]
+        if value >= 0.9995 then
+            local text
+            if value >= 99.95 then
+                text = format("%d", floor(value + 0.5))
+            else
+                text = gsub(format("%.1f", floor(value * 10 + 0.5) / 10), "%.0$", "")
+            end
+            if tonumber(text) >= 1000 and index > 1 then
+                local bigger = SHORT_UNITS[index - 1]
+                text = gsub(format("%.1f", floor(number / bigger[1] * 10 + 0.5) / 10), "%.0$", "")
+                return sign .. text .. bigger[2]
+            end
+            return sign .. text .. unit[2]
+        end
+    end
+    return sign .. format("%d", floor(number + 0.5))
+end
+
+-- An amount as the player chose to see it: short ("12.3k") or in full ("12,345").
+function HST.Number(number)
+    if HST.db and HST.db.shortNumbers then
+        return HST.Short(number)
+    end
+    return HST.Comma(number)
 end
 
 -- 1234567 -> "1,234,567"
