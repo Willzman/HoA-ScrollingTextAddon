@@ -4,7 +4,7 @@ local HST = HoAScrollingText
 local Options = {}
 HST.Options = Options
 
-local WIDTH, HEIGHT = 440, 632
+local WIDTH, HEIGHT = 440, 656
 local window
 
 local function Apply()
@@ -159,20 +159,23 @@ local function Build()
     tinsert(window.boxes, CheckBox(window, "Name hits after your weapon (pets as Call Pet)", 24, -118,
         function() return db().weaponNames end, function(v) db().weaponNames = v end))
 
+    tinsert(window.boxes, CheckBox(window, "Summons show their own icon", 24, -142,
+        function() return db().summonIcons end, function(v) db().summonIcons = v end))
+
     local header = window:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -152)
+    header:SetPoint("TOPLEFT", window, "TOPLEFT", 26, -176)
     header:SetText("Show")
 
     for index, category in ipairs(HST.CATEGORIES) do
         local column = math.mod(index - 1, 2)
         local row = floor((index - 1) / 2)
         local key = category.key
-        tinsert(window.boxes, CheckBox(window, category.label, 24 + column * 200, -170 - row * 24,
+        tinsert(window.boxes, CheckBox(window, category.label, 24 + column * 200, -194 - row * 24,
             function() return db().categories[key] end,
             function(v) db().categories[key] = v end))
     end
 
-    local top = -170 - (floor((table.getn(HST.CATEGORIES) + 1) / 2)) * 24 - 24
+    local top = -194 - (floor((table.getn(HST.CATEGORIES) + 1) / 2)) * 24 - 24
     tinsert(window.sliders, Slider(window, "Text size", 30, top, 10, 40, 1,
         function() return db().fontSize end, function(v) db().fontSize = v end,
         function(v) return format("%d", v) end))

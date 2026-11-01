@@ -296,7 +296,11 @@ function Events.Show(record)
     end
     local icon
     if HST.db.showIcons then
-        icon = weaponIcon or HST.Icons.For(record.spell)
+        -- A summon's hits wear the summon's own icon (an Infernal, not Rain of Fire's).
+        if HST.db.summonIcons and record.source and yours then
+            icon = HST.Icons.Summon(record.source)
+        end
+        icon = icon or weaponIcon or HST.Icons.For(record.spell)
         if not icon and record.direction == "pet" then
             icon = HST.Icons.For(record.source)
         end

@@ -51,6 +51,42 @@ local owners = {}        -- combat log name -> the summon that used it ("Bite" -
 local evidence = {}      -- combat log name -> { strikes = {}, votes = {}, seconds = n }
 local notWeapons = {}    -- names ruled out for every weapon this run (glyph procs and such)
 
+-- A creature has no icon in 1.12, so each Hordes of Azeroth summon gets the icon that fits it,
+-- by its creature name (the server's English and Chinese names). Every icon here is one the game
+-- already uses, or a stock hunter pet family icon. Summons not listed keep their weapon's icon.
+local SUMMON_ICONS = {
+    { "Spell_Shadow_SummonImp", "Imp", "小鬼" },
+    { "Spell_Shadow_SummonVoidWalker", "Voidwalker", "虚空行者" },
+    { "Spell_Shadow_SummonSuccubus", "Succubus", "魅魔" },
+    { "Spell_Shadow_SummonFelHunter", "Felhunter", "恶魔猎犬" },
+    { "Spell_Shadow_SummonInfernal", "Infernal", "地狱火" },
+    { "Spell_Shadow_AntiMagicShell", "Doomguard", "末日守卫" },
+    { "Spell_Shadow_RaiseDead", "Risen Skeleton", "复活的骷髅" },
+    { "Ability_Hunter_Pet_Wolf", "Wolf", "狼" },
+    { "Ability_Hunter_Pet_Cat", "Cat", "猫" },
+    { "Ability_Hunter_Pet_Boar", "Boar", "野猪" },
+    { "Ability_Hunter_Pet_Bear", "Bear", "熊" },
+    { "Ability_Hunter_Pet_Wyvern", "Wyvern", "双足飞龙" },
+    { "Ability_Hunter_Quickshot", "Venomous Snake", "毒蛇" },
+    { "Spell_Frost_SummonWaterElemental", "Water Elemental", "水元素" },
+    { "Spell_Fire_Fire", "Fire Elemental", "火元素" },
+    { "Spell_Nature_SpiritWolf", "Spirit Wolf", "灵魂之狼" },
+    { "Spell_Fire_SearingTotem", "Searing Totem", "灼热图腾" },
+    { "Spell_Fire_SelfDestruct", "Magma Totem", "熔岩图腾" },
+    { "Spell_Nature_ForceOfNature", "Treant", "树人" },
+}
+
+local summonIcons = {}
+for _, row in ipairs(SUMMON_ICONS) do
+    summonIcons[row[2]] = "Interface\\Icons\\" .. row[1]
+    summonIcons[row[3]] = "Interface\\Icons\\" .. row[1]
+end
+
+-- The summon's own icon, by its creature name, or nil.
+function Icons.Summon(name)
+    return name and summonIcons[name]
+end
+
 local function Path(icon)
     if not icon or icon == "" or icon == QUESTION then
         return nil

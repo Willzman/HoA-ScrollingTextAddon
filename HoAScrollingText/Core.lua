@@ -63,6 +63,8 @@ HST.DEFAULTS = {
     lowHealthPercent = 30,
     -- Show each hit under the name of the weapon behind it ("Call Pet" for your pet's bites).
     weaponNames = true,
+    -- Summons show their own icon (Imp, Infernal, Cat...) rather than their weapon's.
+    summonIcons = true,
     -- Combat log spell or creature name -> weapon name, learned from the damage meter (Icons.lua).
     learnedWeapons = {},
     -- Out of the box: your own spells and what they hit for. The game already shows incoming
