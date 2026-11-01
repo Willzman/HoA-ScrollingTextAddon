@@ -23,8 +23,10 @@
 -- the whole hit, so amounts only ever vote.
 --
 -- A summon's abilities belong to the summon: "Cat's Bite" counts as Cat's weapon's damage.
--- Glyph and support names (the server names them in glyphinfo and support lines) are kept out:
--- glyphs are built to overkill, so their hits would only muddy the numbers.
+--
+-- Glyphs are matched the same way: right after each state line the server sends
+-- gmeter~<glyph id>:<damage>:<kills>:<types>,... and glyphinfo names each glyph, so "Shock"
+-- becomes Glyph of the Windseeker. Support names are kept out: they heal and shield.
 
 local HST = HoAScrollingText
 local Icons = {}
@@ -41,11 +43,13 @@ local IDLE_STRIKE = 1
 local EXPLAINED_STRIKE = 0.5
 local SECONDS_TO_SETTLE = 3
 
-local weapons = {}       -- index -> { icon = path, name = weapon name }
-local byWeapon = {}      -- weapon name -> index, this run
+-- Damage sources the meter counts: weapons by loadout index, glyphs as "g<id>".
+local weapons = {}       -- key -> { icon = path, name = weapon or glyph name }
+local byWeapon = {}      -- weapon or glyph name -> key
 local byName = {}        -- other names with an icon: glyphs, support, spellbook
-local notOurs = {}       -- glyph and support names: the server counts those apart from weapons
-local lastDamage = {}    -- weapon index -> meter damage at the last state line
+local notOurs = {}       -- support names: heals and shields, never in the damage meter
+local lastDamage = {}    -- key -> meter damage at the last state or gmeter line
+local pending            -- this second's weapon deltas, waiting for the gmeter line
 local seen = {}          -- combat log name -> damage since the last state line
 local owners = {}        -- combat log name -> the summon that used it ("Bite" -> "Cat")
 local evidence = {}      -- combat log name -> { strikes = {}, votes = {}, seconds = n }
@@ -160,11 +164,13 @@ function Icons.IsWeaponName(name)
     return name and byWeapon[name] and true or false
 end
 
-local function Remember(name, icon)
+local function Remember(name, icon, ours)
     if not name or name == "" then
         return
     end
-    notOurs[name] = true
+    if not ours then
+        notOurs[name] = true
+    end
     local path = Path(icon)
     if path then
         byName[name] = path
@@ -173,6 +179,7 @@ end
 
 local function ResetLearning()
     lastDamage = {}
+    pending = nil
     seen = {}
     owners = {}
     evidence = {}
@@ -181,15 +188,27 @@ end
 
 local handlers = {}
 
-handlers["start"] = function()
-    weapons = {}
+-- Glyph names and icons outlive a run; weapons don't.
+local function KeepGlyphs()
+    local kept = {}
     byWeapon = {}
+    for key, source in pairs(weapons) do
+        if source.glyph then
+            kept[key] = source
+            byWeapon[source.name] = key
+        end
+    end
+    return kept
+end
+
+handlers["start"] = function()
+    weapons = KeepGlyphs()
     ResetLearning()
 end
 
 handlers["loadout"] = function(f)
     local index = 0
-    local fresh = {}
+    local fresh = KeepGlyphs()
     for _, item in ipairs(Split(f[2] or "", ",")) do
         local parts = Split(item, ":")
         if parts[1] == "w" or parts[1] == "e" then
@@ -205,7 +224,6 @@ handlers["loadout"] = function(f)
         end
     end
     weapons = fresh
-    byWeapon = {}
     for at, weapon in pairs(weapons) do
         if weapon.name then
             byWeapon[weapon.name] = at
@@ -225,7 +243,13 @@ handlers["pw"] = function(f)
 end
 
 handlers["glyphinfo"] = function(f)
-    Remember(f[3], f[4])
+    local id, name = f[2], f[3]
+    if not id or id == "" or not name or name == "" then
+        return
+    end
+    Remember(name, f[4], true)
+    weapons["g" .. id] = { name = name, icon = Path(f[4]), glyph = true }
+    byWeapon[name] = "g" .. id
 end
 
 handlers["support"] = function(f)
@@ -287,25 +311,10 @@ local function Decide(name, deltas)
     end
 end
 
-handlers["state"] = function(f)
-    local totals = f[13] and Split(f[13], ",") or {}
-    local deltas = {}
-    local reset = false
-    for index in pairs(weapons) do
-        local damage = tonumber((Split(totals[index] or "", ":"))[1] or "")
-        if damage then
-            local before = lastDamage[index]
-            if before and damage >= before then
-                deltas[index] = damage - before
-            elseif before then
-                reset = true
-            end
-            lastDamage[index] = damage
-        end
-    end
+local function Evaluate(deltas)
     local heard, heardOwners = seen, owners
     seen, owners = {}, {}
-    if reset or not next(deltas) then
+    if not deltas or not next(deltas) then
         return
     end
 
@@ -356,6 +365,68 @@ handlers["state"] = function(f)
     end
 end
 
+-- How far one source's meter total moved; nil when it can't be told (first sight, or a reset).
+local function Move(key, damage, first)
+    local before = lastDamage[key]
+    lastDamage[key] = damage
+    if not before then
+        return first
+    end
+    if damage < before then
+        return nil, true
+    end
+    return damage - before
+end
+
+handlers["state"] = function(f)
+    -- A second state line without a gmeter between: settle the last one on weapons alone.
+    if pending then
+        Evaluate(pending)
+    end
+    local totals = f[13] and Split(f[13], ",") or {}
+    local deltas = {}
+    for index in pairs(weapons) do
+        if type(index) == "number" then
+            local damage = tonumber((Split(totals[index] or "", ":"))[1] or "")
+            if damage then
+                local delta, reset = Move(index, damage, nil)
+                if reset then
+                    pending = nil
+                    seen, owners = {}, {}
+                    return
+                end
+                deltas[index] = delta
+            end
+        end
+    end
+    pending = deltas
+end
+
+-- Sent right after state: glyph totals since the run began, only for glyphs that have hit.
+handlers["gmeter"] = function(f)
+    local deltas = pending or {}
+    pending = nil
+    local listed = {}
+    for _, item in ipairs(Split(f[2] or "", ",")) do
+        local _, _, id, damage = strfind(item, "^(%d+):(%d+)")
+        if id then
+            local key = "g" .. id
+            listed[key] = true
+            if weapons[key] then
+                -- A glyph's first appearance is all its damage so far: it starts from nothing.
+                deltas[key] = Move(key, tonumber(damage), tonumber(damage))
+            end
+        end
+    end
+    -- Glyphs that have hit before but aren't listed can't have moved.
+    for key in pairs(lastDamage) do
+        if type(key) == "string" and not listed[key] then
+            deltas[key] = 0
+        end
+    end
+    Evaluate(deltas)
+end
+
 -- Events.lua reports every outgoing and summon damage line here, by spell or creature name;
 -- `owner` is the summon behind an ability, if any.
 function Icons.NoteDamage(name, amount, owner)
@@ -392,8 +463,10 @@ function Icons.Summary()
     for _ in pairs(Learned() or {}) do
         learned = learned + 1
     end
-    for _ in pairs(weapons) do
-        weaponCount = weaponCount + 1
+    for key in pairs(weapons) do
+        if type(key) == "number" then
+            weaponCount = weaponCount + 1
+        end
     end
     return learned, weaponCount
 end
