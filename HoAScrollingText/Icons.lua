@@ -86,6 +86,14 @@ for _, row in ipairs(SUMMON_ICONS) do
     summonIcons[row[3]] = "Interface\\Icons\\" .. row[1]
 end
 
+-- Hidden creatures the server casts many weapons' spells through: a pool shared by all of
+-- them, so the caster says nothing about which weapon a hit came from. Go by the spell alone.
+local SHARED_CASTERS = { ["Projectile"] = true, ["Pickup Marker"] = true }
+
+function Icons.SharedCaster(name)
+    return name and SHARED_CASTERS[name] or false
+end
+
 -- The summon's own icon, by its creature name, or nil.
 function Icons.Summon(name)
     return name and summonIcons[name]
@@ -121,7 +129,7 @@ end
 
 -- The weapon a combat log name belongs to in this run: its index, or nil.
 local function IndexOf(name)
-    if not name then
+    if not name or SHARED_CASTERS[name] then
         return nil
     end
     local index = byWeapon[name]
@@ -430,9 +438,9 @@ end
 -- Events.lua reports every outgoing and summon damage line here, by spell or creature name;
 -- `owner` is the summon behind an ability, if any.
 function Icons.NoteDamage(name, amount, owner)
-    if name and amount and amount > 0 and next(weapons) and not notOurs[name] then
+    if name and amount and amount > 0 and next(weapons) and not notOurs[name] and not SHARED_CASTERS[name] then
         seen[name] = (seen[name] or 0) + amount
-        if owner and owner ~= name then
+        if owner and owner ~= name and not SHARED_CASTERS[owner] then
             owners[name] = owner
         end
     end

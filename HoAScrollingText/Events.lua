@@ -249,7 +249,7 @@ local function IsMine(record)
     if not source then
         return false
     end
-    if HST.Icons.Weapon(source) or source == UnitName("pet") then
+    if HST.Icons.Weapon(source) or HST.Icons.SharedCaster(source) or source == UnitName("pet") then
         return true
     end
     if enemies[source] and not summons[source] then
@@ -273,7 +273,8 @@ function Events.Show(record)
         if not IsMine(record) then
             return
         end
-        record.direction = "pet"
+        -- A spell fired through the server's hidden projectile is your own spell.
+        record.direction = HST.Icons.SharedCaster(record.source) and "out" or "pet"
     else
         NoteEnemies(record)
     end
